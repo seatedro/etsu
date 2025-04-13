@@ -1,5 +1,8 @@
 # Etsu
 
+![etsu](https://github.com/user-attachments/assets/014ef834-63bc-42a8-a396-e158c8012044)
+
+
 An elegant personal spyware. (JK, it tracks silly metrics)
 
 ## Features
