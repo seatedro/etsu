@@ -48,10 +48,9 @@ impl Default for IntervalSettings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            // local_database: LocalDatabaseSettings { path: default_local_db_path() }, // If configurable
             database: RemoteDatabaseSettings { postgres_url: None },
             intervals_ms: IntervalSettings {
-                processing: default_processing_interval(), // Ensure these defaults exist
+                processing: default_processing_interval(),
                 saving: default_saving_interval(),
             },
             log_level: default_log_level(),

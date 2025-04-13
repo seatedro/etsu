@@ -33,7 +33,6 @@ async fn main() -> Result<()> {
         e
     })?;
 
-    // Setup Logging
     let proj_dirs = ProjectDirs::from("com", "seatedro", "etsu")
         .ok_or_else(|| AppError::Initialization("Failed to get project dirs for logging".into()))?;
     let log_dir = proj_dirs.data_local_dir();
@@ -44,7 +43,7 @@ async fn main() -> Result<()> {
         .with_env_filter(
             EnvFilter::try_new(&settings.log_level).unwrap_or_else(|_| EnvFilter::new("info")),
         )
-        // .with_writer(_log_file)
+        .with_writer(_log_file)
         .with_ansi(false) // Disable colors in file
         .init();
 
@@ -73,10 +72,8 @@ async fn main() -> Result<()> {
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
     let shutdown_tx_clone = shutdown_tx.clone();
 
-    // Setup signal handlers
     let signals = setup_signal_handlers(shutdown_tx_clone)?;
 
-    // Spawn signal handling task
     let signal_task = tokio::spawn(handle_signals(signals, shutdown_tx.clone()));
 
     let metrics_state = Arc::new(MetricsState::default());
@@ -84,14 +81,11 @@ async fn main() -> Result<()> {
 
     info!("Spawning core tasks...");
 
-    // Start the input listener using rdev
-    let mut input_listener = input::listen_for_input(input_tx).await?;
+    input::listen_for_input(input_tx).await?;
 
-    // Clone values for the processing task
     let metrics_state_clone = Arc::clone(&metrics_state);
     let processing_interval = settings.processing_interval();
 
-    // Processing task with shutdown receiver
     let mut shutdown_rx1 = shutdown_tx.subscribe();
     let processing_handle = tokio::spawn(async move {
         tokio::select! {
@@ -103,13 +97,11 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Clone values for the persistence task
     let metrics_state_clone = Arc::clone(&metrics_state);
     let saving_interval = settings.saving_interval();
     let sqlite_pool_clone = sqlite_pool.clone();
     let pg_pool_option_clone = pg_pool_option.clone();
 
-    // Persistence task with shutdown receiver
     let mut shutdown_rx2 = shutdown_tx.subscribe();
     let persistence_handle = tokio::spawn(async move {
         tokio::select! {
@@ -129,34 +121,18 @@ async fn main() -> Result<()> {
     info!("All tasks spawned. Etsu running in background.");
     info!("Press Ctrl+C to exit");
 
-    // Wait for shutdown signal
     let mut shutdown_rx_main = shutdown_tx.subscribe();
     let _ = shutdown_rx_main.recv().await;
     info!("Initiating shutdown...");
 
-    // Cancel the signal task now that we've received the shutdown signal
     signal_task.abort();
 
     info!("Shutting down tasks...");
 
-    // Stop input listener first
     info!("Stopping input listener...");
-    input_listener.stop();
 
-    // Join the input thread with a timeout to ensure it doesn't block indefinitely
-    let join_handle = tokio::task::spawn_blocking(move || {
-        input_listener.join();
-    });
-
-    match tokio::time::timeout(std::time::Duration::from_secs(2), join_handle).await {
-        Ok(_) => info!("Input listener stopped successfully"),
-        Err(_) => warn!("Input listener stop timed out, continuing shutdown..."),
-    };
-
-    // Wait for processing and persistence tasks to complete (with timeout)
     let timeout = tokio::time::Duration::from_secs(5);
 
-    // Use separate timeouts for each task
     let processing_timeout = tokio::time::timeout(timeout, processing_handle);
     let persistence_timeout = tokio::time::timeout(timeout, persistence_handle);
 
@@ -170,8 +146,6 @@ async fn main() -> Result<()> {
     if persistence_result.is_err() {
         warn!("Persistence task did not complete within timeout, aborting");
     }
-
-    // Tasks will be dropped here which implicitly aborts them if they haven't completed
 
     info!("Closing database pools...");
     let close_sqlite = tokio::spawn(async move { sqlite_pool.close().await });

@@ -1,8 +1,8 @@
 use crate::config::RemoteDatabaseSettings;
 use crate::error::Result;
-use sea_query::{Alias, Expr, Iden, PostgresQueryBuilder, Query, SimpleExpr, SqliteQueryBuilder};
+use sea_query::{Alias, Expr, Iden, PostgresQueryBuilder, Query, SqliteQueryBuilder};
 use sea_query_binder::SqlxBinder;
-use sqlx::{migrate::Migrator, Executor, PgPool, Pool, Postgres, Sqlite, SqlitePool, Transaction};
+use sqlx::{migrate::Migrator, PgPool, Pool, Postgres, Sqlite, SqlitePool, Transaction};
 use std::path::Path;
 use tracing::{debug, info, instrument, warn};
 
@@ -29,10 +29,12 @@ enum MetricsIden {
 enum MetricsSummaryIden {
     Table,
     Id,
+    #[allow(dead_code)]
     LastUpdated,
     TotalKeypresses,
     TotalMouseClicks,
     TotalMouseTravelIn,
+    #[allow(dead_code)]
     TotalMouseTravelMi,
     TotalScrollSteps,
 }
@@ -218,140 +220,6 @@ async fn load_initial_totals_from_summary(
     }
 }
 
-async fn update_summary_table_sqlite<'c, E>(executor: E, data: &MetricsData) -> Result<()>
-where
-    E: Executor<'c, Database = sqlx::Sqlite>,
-{
-    let distance_in = data.mouse_distance_in;
-    let distance_mi = distance_in / 63360.0;
-
-    let values_to_update = vec![
-        (
-            MetricsSummaryIden::TotalKeypresses,
-            Expr::col(MetricsSummaryIden::TotalKeypresses)
-                .add(data.keypresses as i64)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalMouseClicks,
-            Expr::col(MetricsSummaryIden::TotalMouseClicks)
-                .add(data.mouse_clicks as i64)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalScrollSteps,
-            Expr::col(MetricsSummaryIden::TotalScrollSteps)
-                .add(data.scroll_steps as i64)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalMouseTravelIn,
-            Expr::col(MetricsSummaryIden::TotalMouseTravelIn)
-                .add(distance_in)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalMouseTravelMi,
-            Expr::col(MetricsSummaryIden::TotalMouseTravelMi)
-                .add(distance_mi)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::LastUpdated,
-            SimpleExpr::Custom("CURRENT_TIMESTAMP".into()),
-        ),
-    ];
-
-    let query = Query::update()
-        .table(MetricsSummaryIden::Table)
-        .values(values_to_update)
-        .and_where(Expr::col(MetricsSummaryIden::Id).eq(1))
-        .to_owned();
-
-    let (sql, values) = query.build_sqlx(SqliteQueryBuilder);
-
-    let rows_affected = sqlx::query_with(&sql, values)
-        .execute(executor)
-        .await?
-        .rows_affected();
-
-    if rows_affected != 1 {
-        warn!(
-            "SQLite metrics summary update affected {} rows, expected 1. Summary might be incorrect.",
-            rows_affected
-        );
-    }
-
-    Ok(())
-}
-
-async fn update_summary_table_postgres<'c, E>(executor: E, data: &MetricsData) -> Result<()>
-where
-    E: Executor<'c, Database = sqlx::Postgres>,
-{
-    let distance_in = data.mouse_distance_in;
-    let distance_mi = distance_in / 63360.0;
-
-    let values_to_update = vec![
-        (
-            MetricsSummaryIden::TotalKeypresses,
-            Expr::col(MetricsSummaryIden::TotalKeypresses)
-                .add(data.keypresses as i64)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalMouseClicks,
-            Expr::col(MetricsSummaryIden::TotalMouseClicks)
-                .add(data.mouse_clicks as i64)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalScrollSteps,
-            Expr::col(MetricsSummaryIden::TotalScrollSteps)
-                .add(data.scroll_steps as i64)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalMouseTravelIn,
-            Expr::col(MetricsSummaryIden::TotalMouseTravelIn)
-                .add(distance_in)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::TotalMouseTravelMi,
-            Expr::col(MetricsSummaryIden::TotalMouseTravelMi)
-                .add(distance_mi)
-                .into(),
-        ),
-        (
-            MetricsSummaryIden::LastUpdated,
-            SimpleExpr::Custom("CURRENT_TIMESTAMP".into()),
-        ),
-    ];
-
-    let query = Query::update()
-        .table(MetricsSummaryIden::Table)
-        .values(values_to_update)
-        .and_where(Expr::col(MetricsSummaryIden::Id).eq(1))
-        .to_owned();
-
-    let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
-
-    let rows_affected = sqlx::query_with(&sql, values)
-        .execute(executor)
-        .await?
-        .rows_affected();
-
-    if rows_affected != 1 {
-        warn!(
-            "Postgres metrics summary update affected {} rows, expected 1. Summary might be incorrect.",
-            rows_affected
-        );
-    }
-
-    Ok(())
-}
-
 async fn persist_metrics_sqlite_in_tx(
     tx: &mut Transaction<'_, Sqlite>,
     data: &MetricsData,
@@ -379,8 +247,6 @@ async fn persist_metrics_sqlite_in_tx(
     sqlx::query_with(&sql_metrics, values_metrics)
         .execute(&mut **tx)
         .await?;
-
-    update_summary_table_sqlite(&mut **tx, data).await?;
 
     Ok(())
 }
@@ -412,8 +278,6 @@ async fn persist_metrics_postgres_in_tx(
     sqlx::query_with(&sql_metrics, values_metrics)
         .execute(&mut **tx)
         .await?;
-
-    update_summary_table_postgres(&mut **tx, data).await?;
 
     Ok(())
 }
@@ -451,7 +315,7 @@ pub async fn persist_metrics_transactional_sqlite(
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     let result = persist_metrics_sqlite_in_tx(&mut tx, data).await;
-    
+
     match result {
         Ok(_) => {
             tx.commit().await?;
@@ -476,7 +340,7 @@ pub async fn persist_metrics_transactional_postgres(
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     let result = persist_metrics_postgres_in_tx(&mut tx, data).await;
-    
+
     match result {
         Ok(_) => {
             tx.commit().await?;
