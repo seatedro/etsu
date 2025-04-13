@@ -8,12 +8,16 @@ An elegant personal spyware. (JK, it tracks silly metrics)
 - Local SQLite storage with optional PostgreSQL syncing
 - Minimal resource usage
 - Simple configuration
+- Runs as a background service/daemon
 
 ## Installation
 
-### Download Release Binary
+### Package Installers
 
-Download the latest release binary from the [Releases](https://github.com/seatedro/etsu/releases) page.
+Download platform-specific packages from the [Releases](https://github.com/seatedro/etsu/releases) page:
+- **macOS**: `.app` bundle or `.pkg` installer
+- **Linux**: `.deb`, `.rpm`, or `.AppImage`
+- **Windows**: `.msi` installer
 
 ### Build from Source
 
@@ -48,9 +52,36 @@ The configuration file is searched in these locations:
 
 ## Usage
 
-### Running the Release Binary
+### Running as a Service/Daemon
 
-Simply execute the binary:
+Etsu is designed to run as a background service:
+
+#### macOS
+```bash
+# Install as a launchd service
+sudo cp extras/macos/com.seatedro.etsu.plist /Library/LaunchDaemons/
+sudo launchctl load -w /Library/LaunchDaemons/com.seatedro.etsu.plist
+```
+
+#### Linux (systemd)
+```bash
+# Install as a systemd service
+sudo cp extras/linux/etsu.service /etc/systemd/system/
+sudo systemctl enable etsu
+sudo systemctl start etsu
+```
+
+#### Windows
+```
+# The installer automatically registers as a Windows service
+# Manual registration:
+sc.exe create Etsu binPath="C:\Program Files\Etsu\etsu.exe" start=auto
+sc.exe start Etsu
+```
+
+### Running Manually
+
+You can also run Etsu directly:
 
 ```bash
 # On macOS/Linux
@@ -59,11 +90,6 @@ Simply execute the binary:
 # On Windows
 etsu.exe
 ```
-
-For automatic startup:
-- **macOS**: Add to Login Items
-- **Linux**: Add to your desktop environment's startup applications
-- **Windows**: Add to Startup folder or create a scheduled task
 
 ### Viewing Statistics
 
