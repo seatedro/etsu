@@ -15,13 +15,6 @@ An elegant personal spyware. (JK, it tracks silly metrics)
 
 ## Installation
 
-### Package Installers
-
-Download platform-specific packages from the [Releases](https://github.com/seatedro/etsu/releases) page:
-- **macOS**: `.app` bundle or `.pkg` installer
-- **Linux**: `.deb`, `.rpm`, or `.AppImage`
-- **Windows**: `.msi` installer
-
 ### Build from Source
 
 ```bash
@@ -55,32 +48,7 @@ The configuration file is searched in these locations:
 
 ## Usage
 
-### Running as a Service/Daemon
-
-Etsu is designed to run as a background service:
-
-#### macOS
-```bash
-# Install as a launchd service
-sudo cp extras/macos/com.seatedro.etsu.plist /Library/LaunchDaemons/
-sudo launchctl load -w /Library/LaunchDaemons/com.seatedro.etsu.plist
-```
-
-#### Linux (systemd)
-```bash
-# Install as a systemd service
-sudo cp extras/linux/etsu.service /etc/systemd/system/
-sudo systemctl enable etsu
-sudo systemctl start etsu
-```
-
-#### Windows
-```
-# The installer automatically registers as a Windows service
-# Manual registration:
-sc.exe create Etsu binPath="C:\Program Files\Etsu\etsu.exe" start=auto
-sc.exe start Etsu
-```
+How in god's name do we package this as a background process cross-platform? Please raise a PR
 
 ### Running Manually
 
