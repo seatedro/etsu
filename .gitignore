@@ -26,3 +26,8 @@ go.work.sum
 kawaiilogger
 dist
 **/.DS_Store
+
+
+# Added by cargo
+
+/target
